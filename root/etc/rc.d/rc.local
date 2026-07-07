@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+
+# hacky firstboot, only runs when liveuser does not exist
+#
+if getent passwd "liveuser" &>/dev/null; then
+	touch /tmp/we-are-live
+else
+	# EL-specific tuning
+	tuned-adm profile balanced
+	sed -E -i 's#^(Defaults[[:space:]]+secure_path[[:space:]]*=[[:space:]]*)(.*)#\1\2:/usr/local/bin:/usr/local/sbin#' /etc/sudoers
+
+	# enable some services (matches Fedora's service set + EL extras)
+	systemctl enable --now cockpit.socket
+	systemctl enable --now sshd
+	systemctl enable --now fprintd
+	systemctl enable --now fstrim.timer
+	systemctl enable --now thermald
+	systemctl disable --now NetworkManager-wait-online
+	systemctl mask NetworkManager-wait-online
+
+	# not sure why the installer does not clean up after itself, so we'll do it on first boot!
+	dnf -y remove anaconda\* dracut-live kdump-utils livesys-scripts isomd5sum
+	systemctl mask kdump.service # service removed above, masked for the future
+
+	# set some kernel flags
+	grubby --update-kernel=ALL --args="quiet rhgb systemd.show_status=auto thunderbolt.host_reset=false biosdevname=0 net.ifnames=0"
+
+	# say hello and self destruct
+	touch /tmp/hello-goodbye && rm /etc/rc.d/rc.local
+fi
+
+exit 0
